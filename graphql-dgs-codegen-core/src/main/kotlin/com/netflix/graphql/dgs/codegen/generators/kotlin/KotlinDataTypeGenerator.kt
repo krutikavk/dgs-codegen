@@ -22,27 +22,18 @@ import com.netflix.graphql.dgs.codegen.CodeGenConfig
 import com.netflix.graphql.dgs.codegen.CodeGenResult
 import com.netflix.graphql.dgs.codegen.filterSkipped
 import com.netflix.graphql.dgs.codegen.generators.java.InputTypeGenerator
+import com.netflix.graphql.dgs.codegen.generators.java.ReservedKeywordSanitizer
 import com.netflix.graphql.dgs.codegen.generators.shared.applyDirectivesKotlin
 import com.netflix.graphql.dgs.codegen.shouldSkip
-import com.squareup.kotlinpoet.BOOLEAN
-import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.DOUBLE
-import com.squareup.kotlinpoet.FLOAT
-import com.squareup.kotlinpoet.FileSpec
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.INT
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.MemberName
-import com.squareup.kotlinpoet.ParameterSpec
-import com.squareup.kotlinpoet.ParameterizedTypeName
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.STRING
-import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.javapoet.FieldSpec
+import com.squareup.javapoet.MethodSpec
+import com.squareup.kotlinpoet.*
 import graphql.language.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.Serializable
+import java.util.*
+import javax.lang.model.element.Modifier
 import com.squareup.kotlinpoet.TypeName as KtTypeName
 
 class KotlinDataTypeGenerator(config: CodeGenConfig, document: Document) :
@@ -248,6 +239,11 @@ abstract class AbstractKotlinDataTypeGenerator(
             kotlinType.addAnnotation(disableJsonTypeInfoAnnotation())
         }
 
+        if(config.generateFieldIsSet) {
+            addBitsetField(kotlinType)
+            addBitSetEnum(fields, kotlinType)
+        }
+
         kotlinType.primaryConstructor(funConstructorBuilder.build())
         kotlinType.addType(TypeSpec.companionObjectBuilder().addOptionalGeneratedAnnotation(config).build())
 
@@ -256,6 +252,36 @@ abstract class AbstractKotlinDataTypeGenerator(
         val fileSpec = FileSpec.builder(getPackageName(), typeSpec.name!!).addType(typeSpec).build()
 
         return CodeGenResult(kotlinDataTypes = listOf(fileSpec))
+    }
+
+    fun addBitsetField(kotlinType: TypeSpec.Builder) {
+        val fieldBuilder = PropertySpec.builder("bitset", BitSet::class)
+            .addAnnotations(listOf(AnnotationSpec.builder(Transient::class).build()))
+            .initializer("BitSet()")
+            .build()
+
+        val setFieldSetter = FunSpec.builder("setField")
+            .addParameter(ParameterSpec.builder("field", Field::class).build())
+            .addStatement("fieldsPresent.set(field.getOrdinal())")
+            .build()
+
+        val isSetGetter = FunSpec.builder("isSet")
+            .returns(BOOLEAN)
+            .addParameter(ParameterSpec.builder("field", Field::class).build())
+            .addStatement("return fieldsPresent.get(field.getOrdinal())")
+            .build()
+
+        kotlinType.addProperty(fieldBuilder)
+        kotlinType.addFunction(setFieldSetter)
+        kotlinType.addFunction(isSetGetter)
+    }
+
+    private fun addBitSetEnum(fields: List<com.netflix.graphql.dgs.codegen.generators.kotlin.Field>, kotlinType: com.squareup.kotlinpoet.TypeSpec.Builder) {
+        val enumClassBuilder = TypeSpec.enumBuilder("Field")
+        fields.forEach {
+            enumClassBuilder.addEnumConstant(it.name.uppercase())
+        }
+        kotlinType.addType(enumClassBuilder.build())
     }
 
     open fun getPackageName(): String {
