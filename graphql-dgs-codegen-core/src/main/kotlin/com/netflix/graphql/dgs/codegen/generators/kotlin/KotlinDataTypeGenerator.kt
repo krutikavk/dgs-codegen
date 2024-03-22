@@ -255,20 +255,22 @@ abstract class AbstractKotlinDataTypeGenerator(
     }
 
     fun addBitsetField(kotlinType: TypeSpec.Builder) {
-        val fieldBuilder = PropertySpec.builder("bitset", BitSet::class)
+        val fieldBuilder = PropertySpec.builder("fieldsPresent", BitSet::class)
             .addAnnotations(listOf(AnnotationSpec.builder(Transient::class).build()))
             .initializer("BitSet()")
             .build()
 
+
+
         val setFieldSetter = FunSpec.builder("setField")
-            .addParameter(ParameterSpec.builder("field", Field::class).build())
-            .addStatement("fieldsPresent.set(field.getOrdinal())")
+            .addParameter(ParameterSpec.builder("field", ClassName("", "Field")).build())
+            .addStatement("fieldsPresent.set(field.ordinal)")
             .build()
 
         val isSetGetter = FunSpec.builder("isSet")
             .returns(BOOLEAN)
-            .addParameter(ParameterSpec.builder("field", Field::class).build())
-            .addStatement("return fieldsPresent.get(field.getOrdinal())")
+            .addParameter(ParameterSpec.builder("field", ClassName("", "Field")).build())
+            .addStatement("return fieldsPresent.get(field.ordinal)")
             .build()
 
         kotlinType.addProperty(fieldBuilder)

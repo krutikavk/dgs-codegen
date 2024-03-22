@@ -3110,6 +3110,121 @@ class KotlinCodeGenTest {
     }
 
     @Test
+    fun generateDataClassWithFieldIsSet() {
+        val schema = """
+            type Query {
+                show(id: ID!): Show
+            }
+            
+            type Mutation {
+                updateShow(input: UpdateShowInput!): Show
+            }
+            
+            type Show  {
+                id: ID!
+                title: String
+                releaseYear: Int
+            }
+            
+            input UpdateShowInput {
+                id: ID!
+                title: String
+                releaseYear: Int
+            }
+        """.trimIndent()
+
+        val codeGenResult = CodeGen(
+            CodeGenConfig(
+                schemas = setOf(schema),
+                packageName = basePackageName,
+                language = Language.KOTLIN,
+                generateFieldIsSet = true
+            )
+        ).generate()
+
+        val dataTypes = codeGenResult.kotlinDataTypes
+        assertThat(dataTypes.size).isEqualTo(2)
+
+
+        // Data Types
+        val typeSpec = dataTypes[0].typeSpecs[0]
+        assertThat(typeSpec.name).isEqualTo("Show")
+
+        assertThat(dataTypes[0].packageName).isEqualTo(typesPackageName)
+
+        assertThat(typeSpec.propertySpecs).extracting("name").contains("fieldsPresent")
+        assertThat(typeSpec.funSpecs).extracting("name").contains("setField", "isSet")
+
+        var setFieldMethod = typeSpec.funSpecs.find{it.name == "setField"}
+        assertThat(setFieldMethod?.body.toString().trim()).isEqualTo("fieldsPresent.set(field.ordinal)")
+
+        var isSetMethod = typeSpec.funSpecs.find{it.name == "isSet"}
+        assertThat(isSetMethod?.body.toString().trim()).isEqualTo("return fieldsPresent.get(field.ordinal)")
+
+        // Add assertion for constructor
+
+        // Enum for accessing bitset
+        assertThat(typeSpec.typeSpecs.size).isEqualTo(2)
+        assertThat(typeSpec.typeSpecs[0].kind).isEqualTo(com.squareup.kotlinpoet.TypeSpec.Kind.CLASS)
+        assertThat(typeSpec.typeSpecs[0].name).isEqualTo("Field")
+        assertThat(typeSpec.typeSpecs[0].enumConstants.size).isEqualTo(3)
+        assertThat(typeSpec.typeSpecs[0].enumConstants).containsKeys("ID", "TITLE", "RELEASEYEAR")
+
+        assertCompilesKotlin(dataTypes)
+    }
+
+    @Test
+    fun generateDataClassWithoutFieldIsSet() {
+        val schema = """
+            type Query {
+                show(id: ID!): Show
+            }
+            
+            type Mutation {
+                updateShow(input: UpdateShowInput!): Show
+            }
+            
+            type Show  {
+                id: ID!
+                title: String
+                releaseYear: Int
+            }
+            
+            input UpdateShowInput {
+                id: ID!
+                title: String
+                releaseYear: Int
+            }
+        """.trimIndent()
+
+        val codeGenResult = CodeGen(
+            CodeGenConfig(
+                schemas = setOf(schema),
+                packageName = basePackageName,
+                language = Language.KOTLIN,
+            )
+        ).generate()
+
+        val dataTypes = codeGenResult.kotlinDataTypes
+        assertThat(dataTypes.size).isEqualTo(2)
+
+
+        // Data Types
+        val typeSpec = dataTypes[0].typeSpecs[0]
+        assertThat(typeSpec.name).isEqualTo("Show")
+
+        assertThat(dataTypes[0].packageName).isEqualTo(typesPackageName)
+
+        assertThat(typeSpec.propertySpecs).extracting("name").doesNotContain("fieldsPresent")
+        assertThat(typeSpec.funSpecs).extracting("name").doesNotContain("setField", "isSet")
+
+        // Enum for accessing bitset
+        assertThat(typeSpec.typeSpecs.size).isEqualTo(1)
+
+        assertCompilesKotlin(dataTypes)
+    }
+
+    @Test
     fun generateInterfaceClassWithInterfaceFields() {
         // schema contains nullable, non-nullable and list types as interface fields  and fields that are
         // not interfaces
